@@ -1,5 +1,5 @@
 """
-Note: #!pip install tensorflow-serving-api==1.12.0
+Note: #!pip2 install tensorflow-serving-api==1.12.0
 """
 from .videoprocessinglayers import VideoProcessingLayer
 
@@ -16,8 +16,6 @@ from google.protobuf import text_format
 import random
 
 DEFAULT_TIMEOUT_IN_SEC = 10.0
-
-
 
 def load_input_tensor(input_image):
     #image_np = load_image_into_numpy_array(input_image)

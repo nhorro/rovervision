@@ -1,0 +1,4 @@
+<launch>  
+  	<node pkg="rovervision" name="rovervision" type="vision.py" output="screen"> 
+  	</node>
+</launch>

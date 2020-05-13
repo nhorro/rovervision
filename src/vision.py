@@ -6,6 +6,7 @@ roslib.load_manifest('rovervision')
 import argparse
 import numpy as np
 import sys
+import os
 import rospy
 import cv2
 from std_msgs.msg import String
@@ -14,9 +15,12 @@ from cv_bridge import CvBridge, CvBridgeError
 
 from layers import VideoProcessingLayer
 
-# --- begin Layers - TODO ordenar --------------------------------------------------------
+# TODO: Ordenar
 
-# -----------------------------------------------------------------------------------
+#from layers.background import BackgroundExtractor1, BackgroundExtractor2
+#from layers.roverhud import RoverHUD
+#from layers.display import VideoDisplay
+
 
 class BackgroundExtractor2(VideoProcessingLayer):
     def __init__(self):
@@ -32,8 +36,6 @@ class BackgroundExtractor2(VideoProcessingLayer):
 
     def release(self, ctx):
         pass
-
-# -----------------------------------------------------------------------------------
 
 class BackgroundExtractor1(VideoProcessingLayer):
     def __init__(self):
@@ -59,46 +61,20 @@ class BackgroundExtractor1(VideoProcessingLayer):
         
         
     def release(self, ctx):
-        pass
+        pass 
 
-# -----------------------------------------------------------------------------------
-
-class VideoDisplay(VideoProcessingLayer):
-    def __init__(self):
-        VideoProcessingLayer.__init__(self)
-        
-    def setup(self, ctx):
-        cv2.namedWindow('Vision')            
-    def process(self, ctx):              
-        cv2.imshow('Vision',ctx["frame"])
-    
-    def release(self, ctx):
-        pass
-
-
-class ROSPublisher(VideoProcessingLayer):
-    def __init__(self, image_pub_topic):
-        VideoProcessingLayer.__init__(self)
-        self.image_pub = rospy.Publisher(image_pub_topic,Image)        
-        
-    def setup(self, ctx):
-        pass
-    
-    def process(self, ctx):                
-      try:
-          self.image_pub.publish(self.bridge.cv2_to_imgmsg(ctx["frame"], "bgr8"))
-      except CvBridgeError as e:
-        print(e)    
-
-    def release(self, ctx):
-        pass
 
 class RoverHUD(VideoProcessingLayer):
     def __init__(self):
         VideoProcessingLayer.__init__(self)
-        self.img_overlay = cv2.imread("../data/hud.png", cv2.IMREAD_COLOR)
+
+        
+        # FIXME
+        abspath=os.path.dirname(os.path.abspath(__file__))    
+        self.img_overlay = cv2.imread(abspath+"/hud.png", cv2.IMREAD_COLOR)
         if type(self.img_overlay) == None:
             raise ValueError("Could not load HUD overlay")
+            #sys.exit()
 
         # HUD        
         self.font = cv2.FONT_HERSHEY_SIMPLEX   
@@ -143,7 +119,17 @@ class RoverHUD(VideoProcessingLayer):
     def release(self, ctx):
         pass
 
-# -----------------------------------------------------------------------------------
+class VideoDisplay(VideoProcessingLayer):
+    def __init__(self):
+        VideoProcessingLayer.__init__(self)
+        
+    def setup(self, ctx):
+        cv2.namedWindow('Vision')            
+    def process(self, ctx):              
+        cv2.imshow('Vision',ctx["frame"])
+    
+    def release(self, ctx):
+        pass        
 
 class RoverVision:
 
@@ -151,8 +137,7 @@ class RoverVision:
     self.node_name = node_name
     rospy.init_node(node_name, log_level=log_level)
     rospy.loginfo("Starting RoverVision.")    
-    
-    
+        
     self.bridge = CvBridge()
     self.ctx = {}
 
@@ -166,6 +151,7 @@ class RoverVision:
     # Default layer state
     self.layers[0].enable(False)
     self.layers[1].enable(False)
+    self.layers[2].enable(True)
 
     rospy.loginfo("Initializing layers...")
     for l in self.layers:
@@ -193,12 +179,6 @@ class RoverVision:
           rospy.loginfo("Setting layer %d to %d" % (layer, new_state) )
           self.layers[layer].enable( new_state )
 
-
-  def test_overlay(self):
-      self.img_overlay = cv2.imread("../data/hud.png", cv2.IMREAD_COLOR)
-      print(self.img_overlay.shape)
-
-
   def run(self):
     try:
       rospy.spin()
@@ -211,11 +191,12 @@ class RoverVision:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Rover Vision')
     #parser.add_argument('--vehicle_id', type=str, default=DEFAULT_ROVER_ID, help='rover identifier')    
-    parser.add_argument('--loglevel', type=int, default=rospy.DEBUG, help='loglevel (0=trace, 6=critical)' )
-    args = parser.parse_args()
+    parser.add_argument('--name', type=str, default="rovervision", help='Node name' )
+    parser.add_argument('--loglevel', type=int, default=rospy.DEBUG, help='Loglevel (0=trace, 6=critical)' )
+    parser.add_argument('--topic', type=str, default="/usb_cam/image_raw/compressed", help='Image topic' )
+    args, unknown = parser.parse_known_args()
     vision = RoverVision(
-      node_name="rovervision",
-      image_sub_topic="/usb_cam/image_raw/compressed",
+      node_name=args.name,
+      image_sub_topic=args.topic,
       log_level=args.loglevel)
-    #vision.test_overlay()    
     vision.run()    
