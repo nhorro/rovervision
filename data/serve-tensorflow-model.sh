@@ -1,0 +1,2 @@
+export SERVING_MODEL=ssd_mobilenet_v2_coco
+docker run -t --rm --runtime=nvidia -p 8501:8501 -p 8500:8500 -v $(realpath $PWD/tensorflowmodels):/models --name object_detection_service -e MODEL_NAME=$SERVING_MODEL tensorflow/serving:1.12.0-gpu

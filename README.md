@@ -55,3 +55,9 @@ Control vehicle through keyboard.
 #### Subscribed Topics
 
 #### Published Topics
+
+
+# WIP
+
+Tensorflow models.
+Para debuggear ejecutar usb_cam en host

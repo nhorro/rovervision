@@ -11,125 +11,23 @@ import rospy
 import cv2
 from std_msgs.msg import String
 from sensor_msgs.msg import Image,CompressedImage
+from roverbridge.msg import general_tmy
 from cv_bridge import CvBridge, CvBridgeError
 
-from layers import VideoProcessingLayer
+from pipeline.videoprocessinglayers import VideoProcessingLayer
 
 # TODO: Ordenar
 
-#from layers.background import BackgroundExtractor1, BackgroundExtractor2
-#from layers.roverhud import RoverHUD
-#from layers.display import VideoDisplay
+from pipeline.videoprocessinglayers.background import BackgroundExtractor1, BackgroundExtractor2
+from pipeline.videoprocessinglayers.roverhud import RoverHUD
+from pipeline.videoprocessinglayers.display import VideoDisplay
 
+#WIP
+from pipeline.videoprocessinglayers.tensorflowobjectdetection import ObjectDetectionLayer, DrawBoundingBoxesLayer
 
-class BackgroundExtractor2(VideoProcessingLayer):
-    def __init__(self):
-        VideoProcessingLayer.__init__(self)
-        self.subtractor = cv2.createBackgroundSubtractorMOG2()
-        
-    def setup(self, ctx):
-        pass
-
-    def process(self, ctx):                
-        mask = self.subtractor.apply(ctx["frame"])
-        ctx["frame"] = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-
-    def release(self, ctx):
-        pass
-
-class BackgroundExtractor1(VideoProcessingLayer):
-    def __init__(self):
-        VideoProcessingLayer.__init__(self)
-        self.count = 0
-        
-    def setup(self, ctx):
-        pass
-
-    def process(self, ctx):                
-        gray = cv2.cvtColor(ctx["frame"], cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (5,5), 0)
-        if self.count > 0:          
-          difference = cv2.absdiff(gray,  self.prev_frame)
-          _, difference = cv2.threshold(difference, 25, 255, cv2.THRESH_BINARY )
-          ctx["frame"] = cv2.cvtColor(difference, cv2.COLOR_GRAY2BGR)
-          #ctx["difference"] = difference
-          #cv2.imshow('Difference',difference)
-        #else:
-
-        self.prev_frame = gray
-        self.count+=1
-        
-        
-    def release(self, ctx):
-        pass 
-
-
-class RoverHUD(VideoProcessingLayer):
-    def __init__(self):
-        VideoProcessingLayer.__init__(self)
-
-        
-        # FIXME
-        abspath=os.path.dirname(os.path.abspath(__file__))    
-        self.img_overlay = cv2.imread(abspath+"/hud.png", cv2.IMREAD_COLOR)
-        if type(self.img_overlay) == None:
-            raise ValueError("Could not load HUD overlay")
-            #sys.exit()
-
-        # HUD        
-        self.font = cv2.FONT_HERSHEY_SIMPLEX   
-        self.font_scale = 0.5
-        self.colors = [ (0, 255, 0), (0, 0, 255) ]
-        self.thickness = 2
-
-        self.variable_overlays = [
-          [ "AHRS     [OK]", "AHRS [FAIL]"   , ( 32,  20), 1 ],
-          [ "GPS      [OK]", "GPS  [FAIL]"   , (500,  20), 1 ],
-          [ "SERIAL   [OK]", "SERIAL [FAIL]" , ( 32, 470), 0 ],           
-          [ "ARMED        ", "DISARMED"      , (500, 470), 1 ]
-        ]            
-
-    def setup(self, ctx):
-        pass
-
-    def process(self, ctx):                
-        # Draw HUD
-        ctx["frame"] = cv2.addWeighted(ctx["frame"],1.0,self.img_overlay,1.0,0)
-        for v in self.variable_overlays:
-            state = v[3]
-            cv2.putText(
-                ctx["frame"], 
-                v[0+state], 
-                v[2],
-                self.font,  
-                self.font_scale, 
-                self.colors[state], 
-                self.thickness, cv2.LINE_AA)
-
-        # Crosshair
-        cv2.putText(
-                ctx["frame"], 
-                "+",                 
-                (315,244),
-                self.font,  
-                self.font_scale, 
-                (0,255,0), 
-                1, cv2.LINE_AA)  
-
-    def release(self, ctx):
-        pass
-
-class VideoDisplay(VideoProcessingLayer):
-    def __init__(self):
-        VideoProcessingLayer.__init__(self)
-        
-    def setup(self, ctx):
-        cv2.namedWindow('Vision')            
-    def process(self, ctx):              
-        cv2.imshow('Vision',ctx["frame"])
-    
-    def release(self, ctx):
-        pass        
+OBJECT_DETECTION_SERVICE_ENDPOINT = 'localhost:8500'
+OBJECT_DETECTION_MODEL_SPEC = 'ssd_mobilenet_v2_coco'
+OBJECT_DETECTION_LABELS = "../data/tensorflowmodels/labels/coco-spanish.pb.txt"
 
 class RoverVision:
 
@@ -145,6 +43,15 @@ class RoverVision:
       BackgroundExtractor1(),
       BackgroundExtractor2(),
       RoverHUD(),
+
+      # Tensorflow      
+      #ObjectDetectionLayer(
+      #    OBJECT_DETECTION_SERVICE_ENDPOINT,
+      #    OBJECT_DETECTION_MODEL_SPEC
+      #),
+      #DrawBoundingBoxesLayer(OBJECT_DETECTION_LABELS),
+      # End WIP
+
       VideoDisplay()
     ]
 
@@ -157,16 +64,18 @@ class RoverVision:
     for l in self.layers:
       l.setup(self.ctx)
 
-    self.image_sub = rospy.Subscriber(image_sub_topic,CompressedImage,self.on_frame)            
+    self.image_sub = rospy.Subscriber(image_sub_topic,CompressedImage,self.on_frame_compressed, queue_size=1)          
 
-  def on_frame(self,image_message):    
-      np_arr = np.fromstring(image_message.data, np.uint8)      
+  def on_frame_compressed(self,image_message):    
+      np_arr = np.fromstring(image_message.data, np.uint8)            
       self.ctx["frame"] = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
       rows,cols,channels = self.ctx["frame"].shape
       self.ctx["rows"] = rows
       self.ctx["cols"] = cols
       self.ctx["channels"] = channels
+      self.run_pipeline()
 
+  def run_pipeline(self):    
       for l in self.layers:
         if l.is_enabled():
           l.process(self.ctx)
@@ -178,6 +87,7 @@ class RoverVision:
           new_state = not self.layers[layer].is_enabled()
           rospy.loginfo("Setting layer %d to %d" % (layer, new_state) )
           self.layers[layer].enable( new_state )
+
 
   def run(self):
     try:
