@@ -101,61 +101,64 @@ class DrawBoundingBoxesLayer(VideoProcessingLayer):
         pass
     
     def process(self, ctx): 
-        output_dict = ctx["OBJECT_DETECTION_OUTPUT"]   
-        output_frame = ctx["frame"]
-        h,w = ctx["frame"].shape[0], ctx["frame"].shape[1]      
-        max_detections = output_dict['classes'].shape[0]
-    
-        labeled_output_scores = {}
-        labeled_output_boxes = {}
-        labeled_output_es = {}
-     
-        for i in range(max_detections):
-            score = output_dict['detection_scores'][i]
-            if score >= 0.5:                
-                class_index = output_dict['classes'][i]
-                box = output_dict['detection_boxes'][i]        
-                x0 = int(box[1] * w)
-                y0 = int(box[0] * h)        
-                x1 = int(box[3] * w)
-                y1 = int(box[2] * h)        
-                
-                cv2.rectangle( output_frame, (x0,y0), (x1,y1), self.class_colors[class_index], 1 )
-                text = "{}: {:.4f}".format(self.class_names[class_index], score)
-                cv2.putText( output_frame, 
-                             text, (x0, y0 - 5), 
-                             cv2.FONT_HERSHEY_SIMPLEX, 
-                             0.3, 
-                             self.class_colors[class_index], 
-                             1,
-                             lineType=cv2.LINE_AA)
-
-                # Scores
-                if self.class_names[class_index] not in labeled_output_scores:
-                    labeled_output_scores[self.class_names[class_index]] = []
-                labeled_output_scores[self.class_names[class_index]].append(score)
-                ctx["OBJECT_DETECTION_LABELED_OUTPUT_SCORES"] = labeled_output_scores
-                
-                # Boxes
-                if self.class_names[class_index] not in labeled_output_boxes:
-                    labeled_output_boxes[self.class_names[class_index]] = []
-                labeled_output_boxes[self.class_names[class_index]].append((x0,y0,x1,y1))
-                ctx["OBJECT_DETECTION_LABELED_OUTPUT_BOXES"] = labeled_output_boxes
-
-                # ES
-                if self.class_names[class_index] not in labeled_output_es:
-                    labeled_output_es[self.class_names[class_index]] = []
-                new_detection = {
-                        "score": score,
-                        "box": {
-                            "x0": x0,
-                            "y0": y0,
-                            "x1": x1,
-                            "y1": y1
-                        }
-                }
-                labeled_output_es[self.class_names[class_index]].append(new_detection)                
-                ctx["OBJECT_DETECTION_LABELED_OUTPUT_ES"] = labeled_output_es
+        if "OBJECT_DETECTION_OUTPUT" in ctx:
+            output_dict = ctx["OBJECT_DETECTION_OUTPUT"]   
+            output_frame = ctx["frame"]
+            h,w = ctx["frame"].shape[0], ctx["frame"].shape[1]      
+            max_detections = output_dict['classes'].shape[0]
         
+            labeled_output_scores = {}
+            labeled_output_boxes = {}
+            labeled_output_es = {}
+         
+            for i in range(max_detections):
+                score = output_dict['detection_scores'][i]
+                if score >= 0.5:                
+                    class_index = output_dict['classes'][i]
+                    box = output_dict['detection_boxes'][i]        
+                    x0 = int(box[1] * w)
+                    y0 = int(box[0] * h)        
+                    x1 = int(box[3] * w)
+                    y1 = int(box[2] * h)        
+                    
+                    cv2.rectangle( output_frame, (x0,y0), (x1,y1), self.class_colors[class_index], 1 )
+                    text = "{}: {:.4f}".format(self.class_names[class_index], score)
+                    cv2.putText( output_frame, 
+                                 text, (x0, y0 - 5), 
+                                 cv2.FONT_HERSHEY_SIMPLEX, 
+                                 0.3, 
+                                 self.class_colors[class_index], 
+                                 1,
+                                 lineType=cv2.LINE_AA)
+
+                    """   
+                    # Scores
+                    if self.class_names[class_index] not in labeled_output_scores:
+                        labeled_output_scores[self.class_names[class_index]] = []
+                    labeled_output_scores[self.class_names[class_index]].append(score)
+                    ctx["OBJECT_DETECTION_LABELED_OUTPUT_SCORES"] = labeled_output_scores
+                    
+                    # Boxes
+                    if self.class_names[class_index] not in labeled_output_boxes:
+                        labeled_output_boxes[self.class_names[class_index]] = []
+                    labeled_output_boxes[self.class_names[class_index]].append((x0,y0,x1,y1))
+                    ctx["OBJECT_DETECTION_LABELED_OUTPUT_BOXES"] = labeled_output_boxes
+
+                    # ES                                
+                    if self.class_names[class_index] not in labeled_output_es:
+                        labeled_output_es[self.class_names[class_index]] = []
+                    new_detection = {
+                            "score": score,
+                            "box": {
+                                "x0": x0,
+                                "y0": y0,
+                                "x1": x1,
+                                "y1": y1
+                            }
+                    }
+                    labeled_output_es[self.class_names[class_index]].append(new_detection)                
+                    ctx["OBJECT_DETECTION_LABELED_OUTPUT_ES"] = labeled_output_es
+                    """
+            
     def release(self, ctx):
         pass        

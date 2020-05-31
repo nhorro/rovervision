@@ -16,18 +16,18 @@ from cv_bridge import CvBridge, CvBridgeError
 
 from pipeline.videoprocessinglayers import VideoProcessingLayer
 
-# TODO: Ordenar
-
 from pipeline.videoprocessinglayers.background import BackgroundExtractor1, BackgroundExtractor2
 from pipeline.videoprocessinglayers.roverhud import RoverHUD
 from pipeline.videoprocessinglayers.display import VideoDisplay
-
-#WIP
+from pipeline.videoprocessinglayers.writer import VideoWriter
 from pipeline.videoprocessinglayers.tensorflowobjectdetection import ObjectDetectionLayer, DrawBoundingBoxesLayer
 
 OBJECT_DETECTION_SERVICE_ENDPOINT = 'localhost:8500'
 OBJECT_DETECTION_MODEL_SPEC = 'ssd_mobilenet_v2_coco'
 OBJECT_DETECTION_LABELS = "../data/tensorflowmodels/labels/coco-spanish.pb.txt"
+
+DEFAULT_CAMERA_TOPIC_RAW = "/camera/image_raw"
+DEFAULT_CAMERA_TOPIC_COMPRESSED = "/camera/image_raw/compressed"
 
 class RoverVision:
 
@@ -39,32 +39,48 @@ class RoverVision:
     self.bridge = CvBridge()
     self.ctx = {}
 
+    self.hud = RoverHUD(640,480)
+    self.video_writer = VideoWriter("captura",640,480,25)
     self.layers = [
-      BackgroundExtractor1(),
-      BackgroundExtractor2(),
-      RoverHUD(),
-
-      # Tensorflow      
-      #ObjectDetectionLayer(
-      #    OBJECT_DETECTION_SERVICE_ENDPOINT,
-      #    OBJECT_DETECTION_MODEL_SPEC
-      #),
-      #DrawBoundingBoxesLayer(OBJECT_DETECTION_LABELS),
+      BackgroundExtractor1(), # 0
+      BackgroundExtractor2(), # 1
+      
+      # Tensorflow # 2,3     
+      ObjectDetectionLayer(
+          OBJECT_DETECTION_SERVICE_ENDPOINT,
+          OBJECT_DETECTION_MODEL_SPEC
+      ),
+      DrawBoundingBoxesLayer(OBJECT_DETECTION_LABELS),
       # End WIP
 
-      VideoDisplay()
+      self.hud, # 4
+
+      VideoDisplay(), # 5
+
+       # 6
+       self.video_writer
     ]
 
     # Default layer state
-    self.layers[0].enable(False)
-    self.layers[1].enable(False)
-    self.layers[2].enable(True)
+    layer_states = [
+      False,  # 0
+      False,  # 1
+      True,   # 2 
+      True,   # 3
+      True,   # 4
+      True,   # 5
+      True,   # 6
+    ]
+    
+    for l in range(len(layer_states)):
+      self.layers[l].enable(layer_states[l])
+      self.hud.set_pipeline_stage_state(l, layer_states[l] )
 
     rospy.loginfo("Initializing layers...")
     for l in self.layers:
       l.setup(self.ctx)
 
-    self.image_sub = rospy.Subscriber(image_sub_topic,CompressedImage,self.on_frame_compressed, queue_size=1)          
+    self.image_sub = rospy.Subscriber(image_sub_topic,CompressedImage,self.on_frame_compressed, queue_size=1)
 
   def on_frame_compressed(self,image_message):    
       np_arr = np.fromstring(image_message.data, np.uint8)            
@@ -87,6 +103,11 @@ class RoverVision:
           new_state = not self.layers[layer].is_enabled()
           rospy.loginfo("Setting layer %d to %d" % (layer, new_state) )
           self.layers[layer].enable( new_state )
+          self.hud.set_pipeline_stage_state(layer, new_state)
+      elif key_pressed == ord('r'):
+        self.video_writer.start_recording()
+      elif key_pressed == ord('t'):
+        self.video_writer.stop_recording()
 
 
   def run(self):
@@ -103,10 +124,10 @@ if __name__ == '__main__':
     #parser.add_argument('--vehicle_id', type=str, default=DEFAULT_ROVER_ID, help='rover identifier')    
     parser.add_argument('--name', type=str, default="rovervision", help='Node name' )
     parser.add_argument('--loglevel', type=int, default=rospy.DEBUG, help='Loglevel (0=trace, 6=critical)' )
-    parser.add_argument('--topic', type=str, default="/usb_cam/image_raw/compressed", help='Image topic' )
+    parser.add_argument('--camera_topic', type=str, default=DEFAULT_CAMERA_TOPIC_COMPRESSED, help='Image topic' )
     args, unknown = parser.parse_known_args()
     vision = RoverVision(
       node_name=args.name,
-      image_sub_topic=args.topic,
+      image_sub_topic=args.camera_topic,
       log_level=args.loglevel)
     vision.run()    

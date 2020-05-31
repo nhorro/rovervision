@@ -7,7 +7,11 @@ class VideoProcessingLayer:
         return self.enabled
 
     def enable(self, state):
+        self.state_changed(state)
         self.enabled = state
+
+    def state_changed(self, new_state):
+        pass
     
     def setup(self, ctx):
         pass
